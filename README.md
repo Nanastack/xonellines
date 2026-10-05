@@ -1,5 +1,7 @@
 # Xonellines
 
+<img width="1898" height="1193" alt="image" src="https://github.com/user-attachments/assets/285b8330-cbd7-489c-b806-2a340c038e4b" />
+
 FFXII-inspired glowing zone-line indicators for Final Fantasy XI, built for
 **Ashita v4** with zone data matched to Phoenix XI.
 
@@ -40,3 +42,5 @@ playable side where a direction is available.
 | --- | --- |
 | `/xl config` | Open or close settings |
 | `/xl on` / `/xl off` | Show or hide zone markers |
+
+
