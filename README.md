@@ -1,4 +1,4 @@
-##Xonellines
+# Xonellines
 
 FFXII-inspired glowing zone-line indicators for Final Fantasy XI, built for
 **Ashita v4** with zone data matched to Phoenix XI.
@@ -18,7 +18,7 @@ Author: Zarianna (100% Vibe coded)
  3. In Phoenix Launcher, toggle the addon on:
 
 
-  ##Configure##
+  ## Configure
 
 In game type `/xl config` to open settings. A temporary row near your character lets you
 preview appearance changes live. Closing the window removes that preview.
@@ -34,7 +34,7 @@ Horizontal adjustments add to a built-in *1.15-yalm* shift toward the inferred
 playable side where a direction is available.
 
 
-  ##Commands##
+  ## Commands
 
 | Command | Action |
 | --- | --- |
