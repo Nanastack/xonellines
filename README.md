@@ -1,8 +1,9 @@
 # Xonellines
 
+FFXII-inspired glowing zone-line indicators for Final Fantasy XI, built for
+
 <img width="1898" height="1193" alt="image" src="https://github.com/user-attachments/assets/285b8330-cbd7-489c-b806-2a340c038e4b" />
 
-FFXII-inspired glowing zone-line indicators for Final Fantasy XI, built for
 **Ashita v4** with zone data matched to Phoenix XI.
 
 Version: 0.3.7
