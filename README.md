@@ -36,6 +36,7 @@ Rows brighten as you approach, shrink with distance, and remain level.
 Horizontal adjustments add to a built-in *1.15-yalm* shift toward the inferred
 playable side where a direction is available.
 
+<img width="741" height="587" alt="image" src="https://github.com/user-attachments/assets/3a015ad5-7495-48e0-9f62-7409cff63692" />
 
   ## Commands
 
