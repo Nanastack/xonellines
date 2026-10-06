@@ -9,7 +9,7 @@ FFXII-inspired glowing zone-line indicators for Final Fantasy XI, built for
 Version: 0.3.7
 Author: Zarianna (100% Vibe coded)
 
-  ##Install
+  ## Install
 
 1. Extract the `xonellines` folder into your Ashita `addons` folder.
 2. Confirm the file is at `addons/xonellines/xonellines.lua`.
