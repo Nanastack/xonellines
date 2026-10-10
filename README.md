@@ -61,11 +61,6 @@ mode can occlude markers behind world geometry.
 | `/xl end Name` | Record its second endpoint and save |
 | `/xl remove ID` | Remove a manual marker listed by `/xl list` |
 
-## Credits
-
-See [SOURCES.md](SOURCES.md) for data provenance and attribution, and
-[DATA-LICENSE.txt](DATA-LICENSE.txt) for the included GPL-3.0 license text.
-This addon is not affiliated with Square Enix or the Final Fantasy XII team.
 
 ## Individual exit overrides
 
