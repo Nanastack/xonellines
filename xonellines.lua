@@ -1,6 +1,6 @@
 addon.name='xonellines'
 addon.author='Zarianna (100% Vibe coded)'
-addon.version='0.3.7'
+addon.version='0.4.14'
 addon.desc='Configurable FFXII-inspired zone boundary orbs.'
 require('common')
 local settings=require('settings')
@@ -8,12 +8,18 @@ local imgui=require('imgui')
 local automatic=require('zone_data')
 local directions=require('zone_directions')
 local ground=require('zone_ground')
+local alternatives=require('zone_alternatives')
 local actors=require('zg_actors')
 for zone,lines in pairs(automatic) do
     for _,line in ipairs(lines) do
         line.direction=(directions[zone] or {})[line.id]
         local hit=(ground[zone] or {})[line.id]
-        if hit then line.groundY=hit.y;line.groundSpans=hit.spans end
+        if hit then line.groundY=hit.y;line.groundSpans=hit.spans;line.localGround=true end
+        local alt=(alternatives[zone] or {})[line.id]
+        if alt then
+            line.destination=alt.name;line.altGroundY=alt.y
+            if not line.groundY then line.groundY=alt.y end
+        end
     end
 end
 local function normalizeName(value)
@@ -31,6 +37,11 @@ end
 table.sort(zoneList,function(a,b)return a.name<b.name end)
 local search={''}
 local selectedZone=nil
+local selectedExit=nil
+local sceneCamera=nil
+local scenePass=0
+local sceneDrawn=false
+local sceneError=nil
 local geom=require('zg_math')
 local renderer
 local function clone(value)
@@ -43,7 +54,7 @@ local defaults=T{enabled=legacy.enabled~=false,auto=legacy.auto~=false,range=30,
     size=legacy.size or 0.30,height=legacy.height or 0.35,brightness=legacy.brightness or 1,
     opacity=1,orbColor=T{0.08,0.39,1},coreColor=T{0.85,0.97,1},coreSize=0.12,
     coreStrength=0.65,lines=T{},zoneOffsets=T{},migrated=false,
-    horizontal=0,zoneHorizontal=T{},occludePlayers=true,occludeNPCs=true}
+    horizontal=0,zoneHorizontal=T{},occludePlayers=true,occludeNPCs=true,occlusionMode=0,exitOverrides=T{}}
 local s=settings.load(defaults,'v033')
 local opened=false
 local openFlag={false}
@@ -96,7 +107,7 @@ local function panel(p)
     if not opened then return end
     imgui.SetNextWindowPos({40,40},ImGuiCond_FirstUseEver)
     imgui.SetNextWindowSize({510,620},ImGuiCond_FirstUseEver)
-    local visible=imgui.Begin('xonellines v0.3.7 configuration',openFlag,0)
+    local visible=imgui.Begin('xonellines v0.4.14 configuration',openFlag,0)
     local ok,err=pcall(function()
     if visible then
         imgui.Text('Inspired by Final Fantasy XII zone line indicators.')
@@ -123,10 +134,16 @@ local function panel(p)
         slider('Center radius','coreSize',0,0.5)
         slider('Center amount','coreStrength',0,1)
         imgui.Separator()
-        if imgui.CollapsingHeader('Player / NPC occlusion') then
+        if imgui.CollapsingHeader('Occlusion') then
+            local terrain={s.occlusionMode==1}
+            if imgui.Checkbox('Terrain occlusion',terrain) then
+                s.occlusionMode=terrain[1] and 1 or 0;dirty=true;fault=false;sceneError=nil
+            end
+            imgui.TextWrapped('Hide orbs behind walls and terrain. Orbs appear more solid with this enabled; turn it off for a softer glow. In this mode, lowering opacity makes orbs smaller.')
+            if sceneError then imgui.TextWrapped(sceneError) end
             checkbox('Player occlusion','occludePlayers')
             checkbox('NPC occlusion','occludeNPCs')
-            imgui.TextWrapped('Tests estimated actor silhouettes, including your character. Not pixel-perfect; sizes can differ by model. Walls and terrain are ignored. Both options default to on.')
+            imgui.TextWrapped('Hide orbs behind players (including you) and NPCs. Coverage is approximate. To show orbs through characters, turn off Terrain occlusion as well as the matching Player or NPC option.')
         end
         if imgui.CollapsingHeader('Per-zone offset tuning') then
             if not selectedZone and p then selectedZone=p.zone end
@@ -137,7 +154,7 @@ local function panel(p)
                 for _,zone in ipairs(zoneList) do
                     local label=zone.name..' ('..zone.id..')'
                     if label:lower():find(normalizeName(search[1]):lower(),1,true) then
-                        if imgui.Selectable(label,selectedZone==zone.id) then selectedZone=zone.id end
+                        if imgui.Selectable(label,selectedZone==zone.id) then selectedZone=zone.id;selectedExit=nil end
                     end
                 end
             end
@@ -151,6 +168,42 @@ local function panel(p)
                 local horizontal={s.zoneHorizontal[key] or 0}
                 if imgui.SliderFloat('Zone vertical adjustment',vertical,-5,5,'%.2f') then s.zoneOffsets[key]=vertical[1];dirty=true end
                 if imgui.SliderFloat('Zone horizontal adjustment',horizontal,-5,5,'%.2f') then s.zoneHorizontal[key]=horizontal[1];dirty=true end
+                imgui.Separator()
+                imgui.Text('Individual exits (adjustments add to Global and Zone)')
+                local exits=automatic[selectedZone] or {}
+                local visible=imgui.BeginChild('xonellines_exit_list',{0,110},0,0)
+                local exitOk,exitErr=pcall(function()
+                    if visible then
+                        for _,line in ipairs(exits) do
+                            local label=(line.destination or line.name)..' ['..line.id..']'
+                            if imgui.Selectable(label,selectedExit==line.id) then selectedExit=line.id end
+                        end
+                    end
+                end)
+                imgui.EndChild()
+                if not exitOk then error(exitErr,0) end
+                local chosen
+                for _,line in ipairs(exits) do if line.id==selectedExit then chosen=line;break end end
+                if chosen then
+                    imgui.Text('Exit: '..(chosen.destination or chosen.name)..' ['..chosen.id..']')
+                    s.exitOverrides=s.exitOverrides or T{}
+                    local zoneSettings=s.exitOverrides[key] or T{}
+                    local ov=zoneSettings[chosen.id] or T{}
+                    local v={ov.vertical or 0};local h={ov.horizontal or 0};local show={ov.enabled~=false}
+                    local changed=false
+                    if imgui.Checkbox('Show this exit',show) then ov.enabled=show[1];changed=true end
+                    if imgui.SliderFloat('Exit vertical adjustment',v,-10,10,'%.2f') then ov.vertical=v[1];changed=true end
+                    if chosen.direction then
+                        if imgui.SliderFloat('Exit horizontal adjustment',h,-10,10,'%.2f') then ov.horizontal=h[1];changed=true end
+                    else imgui.TextWrapped('No verified inward direction for this exit; horizontal adjustment is unavailable.') end
+                    if chosen.altGroundY and chosen.localGround then
+                        local use={ov.alternative==true}
+                        if imgui.Checkbox('Use alternate averaged ground height',use) then ov.alternative=use[1];changed=true end
+                    end
+                    if changed then zoneSettings[chosen.id]=ov;s.exitOverrides[key]=zoneSettings;dirty=true end
+                    if imgui.Button('Reset this exit') then zoneSettings[chosen.id]=nil;s.exitOverrides[key]=zoneSettings;dirty=true end
+                    imgui.TextWrapped('Exit adjustments affect the actual boundary. The nearby appearance preview is independent.')
+                end
             end
             imgui.TextWrapped('These add to the global offsets. Positive horizontal shifts follow each exit toward the playable side, where a direction is available.')
         end
@@ -167,10 +220,11 @@ local function appearance(p)
     local out={}; for k,v in pairs(s) do out[k]=v end
     out.zoneOffset=s.zoneOffsets[tostring(p.zone)] or 0
     out.zoneHorizontal=s.zoneHorizontal[tostring(p.zone)] or 0
+    out.exitOverrides=(s.exitOverrides or {})[tostring(p.zone)] or {}
     return out
 end
-local function drawWorld(p)
-    if not p then return end
+local function drawWorld(p,scene)
+    if not p then return false end
     if lastZone~=p.zone then
         actors.reset()
         firstPoint=nil
@@ -184,21 +238,42 @@ local function drawWorld(p)
         for _,line in ipairs(s.lines[tostring(p.zone)] or {}) do lines[#lines+1]=line end
     end
     if opened and preview and preview.zone==p.zone then lines[#lines+1]=preview end
-    if #lines==0 then return end
+    if #lines==0 then return true end
     if not renderer then renderer=require('zg_render') end
-    local style=appearance(p)
+    local style=appearance(p);style.scene=scene==true;style.camera=sceneCamera
     local count,detail=renderer.draw(lines,p,style,0)
-    status=string.format('%d visible orbs | %s',count,detail or '')
+    status=string.format('%d submitted orbs | %s',count,detail or '')
+    return true
 end
+ashita.events.register('d3d_beginscene','xonellines_scene_occlusion',function()
+    scenePass=scenePass+1
+    if s.occlusionMode~=1 or scenePass~=2 then return end
+    local ok,result=pcall(function()
+        migrate()
+        renderer=renderer or require('zg_render')
+        sceneCamera=renderer.captureCamera()
+        if not sceneCamera then return false end
+        return drawWorld(position(),true)
+    end)
+    if ok then sceneDrawn=result==true;if sceneDrawn then sceneError=nil end
+    else
+        s.occlusionMode=0;dirty=true;sceneDrawn=false
+        sceneError='Terrain alternative disabled: '..tostring(result);say(sceneError)
+    end
+end)
 ashita.events.register('d3d_present','xonellines_v03_present',function()
     local ok,err=pcall(function()
         migrate()
         local p=position()
         if opened and p and not preview then makePreview(p) end
         panel(p)
-        drawWorld(p)
+        if s.occlusionMode~=1 or not sceneDrawn then
+            drawWorld(p,false)
+            if s.occlusionMode==1 then sceneError='Second scene draw unavailable this frame; using original glow.' end
+        end
         if dirty and os.clock()-lastSave>1 then save() end
     end)
+    scenePass=0;sceneDrawn=false;sceneCamera=nil
     if not ok then
         fault=true
         if tostring(err)~=lastError then lastError=tostring(err); say('Error: '..lastError..' | /xl on retries') end
@@ -245,4 +320,4 @@ ashita.events.register('command','xonellines_v03_command',function(e)
     else say('/xl config | auto on/off | range 30 | on/off | list | start | end Name | remove ID') end
 end)
 ashita.events.register('unload','xonellines_v03_unload',function() if dirty then save() end; if renderer then renderer.release() end end)
-ashita.events.register('load','xonellines_v03_load',function() say('v0.3.7 loaded. /xl config opens live appearance controls.') end)
+ashita.events.register('load','xonellines_v03_load',function() say('v0.4.14 loaded. /xl config opens live appearance controls.') end)

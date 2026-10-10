@@ -17,7 +17,7 @@ function M.project(p,view,projection,vp)
     local depth = z/w
     if depth < 0 or depth > 1 then return nil end
     return {x=vp.X+(x/w+1)*vp.Width/2, y=vp.Y+(1-y/w)*vp.Height/2,
-        z=vp.MinZ+depth*(vp.MaxZ-vp.MinZ), rhw=1/w,
+        cameraDepth=w, z=vp.MinZ+depth*(vp.MaxZ-vp.MinZ), rhw=1/w,
         scale=math.abs(projection._22)*vp.Height/(2*w)}
 end
 function M.length(a,b)

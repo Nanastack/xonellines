@@ -1,9 +1,9 @@
 local geom=require('zg_math')
 local M={}
-local function inOpening(line,t)
+local function inOpening(line,t,margin)
     if not line.groundSpans then return true end
     for _,span in ipairs(line.groundSpans) do
-        if t>=span[1] and t<=span[2] then return true end
+        if t>=span[1]+margin and t<=span[2]-margin then return true end
     end
     return false
 end
@@ -12,13 +12,17 @@ end
 function M.collect(lines,player,s)
     local result={}
     for li,line in ipairs(lines) do
-        local lift=(line.height or 0.35)+(s.height-0.35)+(s.zoneOffset or 0)
+        local override=(s.exitOverrides or {})[line.id] or {}
+        if override.enabled~=false then
+        local groundY=override.alternative and line.altGroundY or line.groundY
+        local vertical=(s.zoneOffset or 0)+(override.vertical or 0)
+        local lift=(line.height or 0.35)+(s.height-0.35)+vertical
         local direction=line.direction
-        local shift=(s.horizontal or 0)+(s.zoneHorizontal or 0)+(direction and 1.15 or 0)
+        local shift=(s.horizontal or 0)+(s.zoneHorizontal or 0)+(override.horizontal or 0)+(direction and 1.15 or 0)
         local ox=direction and direction.x*shift or 0
         local oz=direction and direction.z*shift or 0
-        local a={x=line.a.x+ox,y=line.groundY and (line.groundY-s.height-(s.zoneOffset or 0)) or (line.a.y-lift),z=line.a.z+oz}
-        local b={x=line.b.x+ox,y=line.groundY and (line.groundY-s.height-(s.zoneOffset or 0)) or (line.b.y-lift),z=line.b.z+oz}
+        local a={x=line.a.x+ox,y=groundY and (groundY-s.height-vertical) or (line.a.y-lift),z=line.a.z+oz}
+        local b={x=line.b.x+ox,y=groundY and (groundY-s.height-vertical) or (line.b.y-lift),z=line.b.z+oz}
         local length=geom.length(a,b)
         if length>0.001 then
             local dx,dy,dz=(b.x-a.x)/length,(b.y-a.y)/length,(b.z-a.z)/length
@@ -35,11 +39,12 @@ function M.collect(lines,player,s)
                 for i=first,last do
                     local p={x=a.x+dx*i*interval,y=a.y+dy*i*interval,z=a.z+dz*i*interval}
                     local distance=geom.length(p,player)
-                    if distance<s.range and inOpening(line,i/steps) then
+                    if distance<s.range and inOpening(line,i/steps,(s.size or 0)/length) then
                         result[#result+1]={point=p,distance=distance,line=li,index=i}
                     end
                 end
             end
+        end
         end
     end
     table.sort(result,function(a,b)
